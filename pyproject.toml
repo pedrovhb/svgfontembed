@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "svgfontembed"
-version = "0.1.1"
+version = "0.2.0"
 description = ""
 authors = ["Pedro Batista <pedrovhb@gmail.com>"]
 readme = "README.md"
@@ -10,10 +10,12 @@ python = "^3.10"
 httpx = "^0.23.1"
 loguru = "^0.6.0"
 appdirs = "^1.4.4"
-fonttools = {extras = ["woff"], version = "^4.38.0"}
+fonttools = {extras = ["brotli", "woff"], version = "^4.38.0"}
 typer = "^0.7.0"
 rich = "^12.6.0"
 parsel = "^1.7.0"
+brotli = "^1.0.9"
+tinycss = "^0.4"
 
 [tool.poetry.scripts]
 svgfontembed = "svgfontembed.svgfontembed:app"
@@ -30,7 +32,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "svgfontembed"
-version = "0.1.1"
+version = "0.2.0"
 description = "A Python CLI tool that allows you to embed fonts in SVG files"
 readme = "README.md"
 

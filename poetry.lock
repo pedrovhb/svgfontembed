@@ -414,6 +414,17 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "tinycss"
+version = "0.4"
+description = "tinycss is a complete yet simple CSS parser for Python."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+test = ["pytest-cov", "pytest-flake8", "pytest-isort", "pytest-runner"]
+
+[[package]]
 name = "toml"
 version = "0.10.2"
 description = "Python Library for Tom's Obvious, Minimal Language"
@@ -527,7 +538,7 @@ test = ["pytest"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "a7988bf0db4d43116519ecb651d97ac2c444c381524640af2566b62f66be6365"
+content-hash = "e03259366061359346738b16653622182dc869abb654d55cbf09c037211216fc"
 
 [metadata.files]
 anyio = [
@@ -1014,6 +1025,9 @@ sniffio = [
 stdlibs = [
     {file = "stdlibs-2022.10.9-py3-none-any.whl", hash = "sha256:0deede419c34f9d57cddaff35939af6e186be6b3293c1f022eb0647709fb5b78"},
     {file = "stdlibs-2022.10.9.tar.gz", hash = "sha256:72a3e4a7fbb40b0e766197e3381c2aabb4ca0442633e0bd99ffeec3908c9fdd8"},
+]
+tinycss = [
+    {file = "tinycss-0.4.tar.gz", hash = "sha256:12306fb50e5e9e7eaeef84b802ed877488ba80e35c672867f548c0924a76716e"},
 ]
 toml = [
     {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
