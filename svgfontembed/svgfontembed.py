@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from functools import cached_property, lru_cache
 from pathlib import Path
+from typing import NamedTuple
 
 import httpx
 import typer
@@ -56,6 +57,7 @@ class FontFace:
     def src_url(self) -> str | None:
         if src := src_regex.search(self.font_face_definition):
             return src.group(1).strip("\"' ")
+        return None
 
     @cached_property
     def font_family(self) -> str | None:
@@ -64,16 +66,16 @@ class FontFace:
         return None
 
     @classmethod
-    def from_svg(cls, svg_contents: str) -> tuple[FontFace]:
-        return tuple(FontFace(definition) for definition in font_face_regex.findall(svg_contents))
+    def from_svg(cls, svg_contents: str) -> tuple[FontFace, ...]:
+        return tuple(
+            FontFace(definition) for definition in font_face_regex.findall(svg_contents)
+        )
 
     @lru_cache(maxsize=1)
     async def get_font_contents(self) -> bytes | None:
-        # todo - cache on disk
-
         if not self.src_url:
             logger.warning(f"Font face {self.font_family} has no src url.")
-            return
+            return None
 
         self.font_file_name = Path(self.src_url).name
 
@@ -81,25 +83,34 @@ class FontFace:
         font_req = await httpx_client.get(self.src_url)
         font_req.raise_for_status()
         font_contents = await font_req.aread()
-        logger.info(f"Font downloaded: {self.font_family} ({len(font_contents) / 1024:.2f}kb)")
+        logger.info(
+            f"Font downloaded: {self.font_family} ({len(font_contents) / 1024:.2f}kb)"
+        )
         return font_contents
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.font_face_definition)
+
+
+class SubsetDefinitionResult(NamedTuple):
+    svg_contents: str
+    total_fonts_size: int
 
 
 async def get_font_subset_definition(
     font_face: FontFace, characters: set[str]
-) -> tuple[str, int] | None:
+) -> SubsetDefinitionResult | None:
     font_contents = await font_face.get_font_contents()
 
     if not font_contents:
         logger.warning(f"Unable to get font for {font_face.font_family}, skipping")
-        return
+        return None
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        font_file = tmpdir / font_face.src_url.split("/")[-1]
+        tmpdir_path = Path(tmpdir)
+        name_from_url = font_face.src_url.split("/")[-1] if font_face.src_url else None
+        font_file_name = name_from_url or font_face.font_file_name or "font.woff2"
+        font_file = tmpdir_path / font_file_name
         font_size = font_file.write_bytes(font_contents)
         options = Options(flavor="woff2")
         font = load_font(font_file, options)
@@ -107,7 +118,7 @@ async def get_font_subset_definition(
         subsetter.populate(text="".join(characters))
         subsetter.subset(font)
 
-        subset_file = tmpdir / "subset.woff2"
+        subset_file = tmpdir_path / "subset.woff2"
         save_font(font, subset_file, options=subsetter.options)
         message = (
             f"Success! {font_face.font_family} subsetted to {len(characters)} characters."
@@ -118,17 +129,25 @@ async def get_font_subset_definition(
         bs = subset_file.read_bytes()
         encoded = base64.b64encode(bs).decode("utf-8")
         src_line = f"src: url('data:font/woff2;base64,{encoded}') format('woff2');"
-        result = re.sub(r"src:\s*url\(([^)]*)\)\s*;", src_line, font_face.font_face_definition)
-        return result, font_size
+        result = re.sub(
+            r"src:\s*url\(([^)]*)\)\s*;", src_line, font_face.font_face_definition
+        )
+        return SubsetDefinitionResult(result, font_size)
 
 
-async def main(
-    svg_contents: str,
-    keep_unused_fonts: bool,
-) -> str:
-    original_size = len(svg_contents)
+def replace_escaped_unicode(svg_contents: str) -> str:
+    """Replace escaped unicode characters with their actual unicode characters."""
+    svg_contents = re.sub(r"&#(\d+);", lambda g: chr(int(g.group(1))), svg_contents)
+    return svg_contents
+
+
+class EmbedFontsResult(NamedTuple):
+    svg_contents: str
+    total_fonts_size: int
+
+
+async def embed_fonts(svg_contents: str, keep_unused_fonts: bool) -> EmbedFontsResult:
     total_fonts_size = 0
-
     font_faces = FontFace.from_svg(svg_contents)
     families = [
         font.font_family if font.font_family is not None else "(unknown name)"
@@ -136,8 +155,9 @@ async def main(
     ]
     if not families:
         logger.warning("No fonts found in SVG")
-        raise typer.Exit(1)
-    logger.info(f"Found {len(font_faces)} font faces: {', '.join(families)}")
+        # raise typer.Exit(1)
+    else:
+        logger.info(f"Found {len(font_faces)} font faces: {', '.join(families)}")
 
     to_process = []
     for face in font_faces:
@@ -145,7 +165,9 @@ async def main(
         characters = set("".join(text))
         if characters:
             to_process.append((face, characters))
-            logger.info(f"Font face {face.font_family} uses {len(characters)} unique characters.")
+            logger.info(
+                f"Font face {face.font_family} uses {len(characters)} unique characters."
+            )
         else:
             if not keep_unused_fonts:
                 logger.warning(f"Font face {face.font_family} has no used characters.")
@@ -153,9 +175,12 @@ async def main(
                 logger.warning(r"Set the --keep-unused-fonts flag to keep it.")
                 svg_contents = svg_contents.replace(face.font_face_definition, "")
                 try:
-                    req = await httpx_client.head(face.src_url)
-                    total_fonts_size += int(req.headers.get("content-length", 0))
-                    logger.success(f"Saved {total_fonts_size / 1024:.2f}kb by removing unused font")
+                    if face.src_url:
+                        req = await httpx_client.head(face.src_url)
+                        total_fonts_size += int(req.headers.get("content-length", 0))
+                        logger.success(
+                            f"Saved {total_fonts_size / 1024:.2f}kb by removing unused font"
+                        )
                 except (httpx.HTTPError, ValueError):
                     logger.warning(f"Unable to get size of {face.src_url}")
             else:
@@ -163,15 +188,40 @@ async def main(
 
     logger.info(f"Processing {len(to_process)} font faces.")
     for face, characters in to_process:
-        subset_definition, original_font_size = await get_font_subset_definition(face, characters)
+        subset_result = await get_font_subset_definition(face, characters)
+        if subset_result is None:
+            continue
+        subset_definition, original_font_size = subset_result
+        svg_contents = svg_contents.replace(
+            face.font_face_definition, subset_definition
+        )
+        total_fonts_size += original_font_size
+    return EmbedFontsResult(svg_contents, total_fonts_size)
 
-        if subset_definition is not None:
-            svg_contents = svg_contents.replace(face.font_face_definition, subset_definition)
-            total_fonts_size += original_font_size
+
+async def main(
+    svg_contents: str,
+    keep_unused_fonts: bool,
+    do_replace_escaped_unicode: bool,
+    do_embed_fonts: bool,
+) -> str:
+
+    original_size = len(svg_contents)
+    total_fonts_size = 0
+
+    if do_replace_escaped_unicode:
+        svg_contents = replace_escaped_unicode(svg_contents)
+
+    if do_embed_fonts:
+        result = await embed_fonts(svg_contents, keep_unused_fonts)
+        svg_contents = result.svg_contents
+        total_fonts_size = result.total_fonts_size
 
     logger.info(f"Original SVG size: {original_size / 1024:.2f}kb")
     logger.info(f"New SVG size: {len(svg_contents) / 1024:.2f}kb")
-    logger.info(f"Size of fonts that would've been downloaded: {total_fonts_size / 1024:.2f}kb")
+    logger.info(
+        f"Size of fonts that would've been downloaded: {total_fonts_size / 1024:.2f}kb"
+    )
     saved = original_size + total_fonts_size - len(svg_contents)
     if saved > 0:
         logger.success(f"Saved {saved / 1024:.2f}kb in total")
@@ -213,10 +263,21 @@ def svg_font_embed(
         "--overwrite",
         help="Overwrite existing files.",
     ),
+    do_embed_fonts: bool = typer.Option(
+        True,
+        "--embed-fonts",
+        help="Embed fonts in the SVG.",
+    ),
     keep_unused_fonts: bool = typer.Option(
         False,
         "--keep-unused",
         help="Keep fonts which are not used in the SVG.",
+    ),
+    do_replace_escaped_unicode: bool = typer.Option(
+        True,
+        "--replace-escaped-unicode",
+        "-u",
+        help="Replace escaped unicode characters (e.g. `&#10245;` with their Unicode  )",
     ),
 ) -> None:
     """Embed fonts in an SVG file, using only the subset of characters actually present."""
@@ -225,10 +286,7 @@ def svg_font_embed(
         logger.error("Cannot use --inplace and --output together.")
         raise typer.Exit(1)
 
-    if output == Path("-"):
-        logger.info("Writing to stdout")
-        output = sys.stdout
-    else:
+    if output != Path("-"):
         if output.is_dir():
             output = (output / input_svg.name).with_stem(input_svg.stem + "_subset")
 
@@ -250,14 +308,21 @@ def svg_font_embed(
         logger.info(f"Reading from {input_svg}")
         svg_contents = input_svg.read_text()
 
-    svg_contents = asyncio.run(main(svg_contents, keep_unused_fonts))
+    svg_contents = asyncio.run(
+        main(
+            svg_contents=svg_contents,
+            keep_unused_fonts=keep_unused_fonts,
+            do_replace_escaped_unicode=do_replace_escaped_unicode,
+            do_embed_fonts=do_embed_fonts,
+        )
+    )
 
-    if output == sys.stdout:
-        output.write(svg_contents)
+    if output == Path("-"):
+        sys.stdout.write(svg_contents)
     else:
         output.write_text(svg_contents)
 
-    logger.success("Done!")
+    logger.success(f"Done! Wrote to {str(output) if output != Path('-') else 'stdout'}")
 
 
 app()
