@@ -1,0 +1,58 @@
+[tool.poetry]
+name = "svgfontembed"
+version = "0.1.0"
+description = ""
+authors = ["Pedro Batista <pedrovhb@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+httpx = "^0.23.1"
+loguru = "^0.6.0"
+appdirs = "^1.4.4"
+fonttools = {extras = ["woff"], version = "^4.38.0"}
+typer = "^0.7.0"
+rich = "^12.6.0"
+parsel = "^1.7.0"
+
+[tool.poetry.scripts]
+svgfontembed = "svgfontembed.svgfontembed:app"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^0.991"
+usort = "^1.0.5"
+black = "^22.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[project]
+name = "svgfontembed"
+version = "0.1.0"
+description = "A Python CLI tool that allows you to embed fonts in SVG files"
+readme = "README.md"
+
+authors = [{ name = "Pedro von Hertwig Batista", email = "pedro-pypi@pedrovhb.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Development Status :: 4 - Beta",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Environment :: Console",
+    "Topic :: Multimedia :: Graphics",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+]
+keywords = ["SVG", "font", "embed"]
+dependencies = ["asyncio", "fonttools", "rich", "httpx", "typer", "parsel", "loguru", "appdirs"]
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+dev = ["black", "usort", "pytest"]
+
+[project.scripts]
+svgfontembed = "svgfontembed.svgfontembed:app"
