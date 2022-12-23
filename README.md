@@ -58,6 +58,8 @@ svgfontembed input.svg output.svg --overwrite
 svgfontembed input.svg output.svg --keep-unused
 ```
 
+![example output with embedded font](test_files/example_light_subset.svg)
+
 ## License
 
 svgfontembed is licensed under the MIT license. See the LICENSE file for more details.
