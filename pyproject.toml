@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "svgfontembed"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Pedro Batista <pedrovhb@gmail.com>"]
 readme = "README.md"
@@ -30,7 +30,7 @@ build-backend = "poetry.core.masonry.api"
 
 [project]
 name = "svgfontembed"
-version = "0.1.0"
+version = "0.1.1"
 description = "A Python CLI tool that allows you to embed fonts in SVG files"
 readme = "README.md"
 
