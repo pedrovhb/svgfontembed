@@ -50,6 +50,41 @@ def get_text_from_svg(svg_contents: str, family: str | None = None) -> list[str]
         # Get text elements matching a selector that uses the font-family
         for css in sel.css("style::text"):
             # todo - parse from ((?:local\(([^)]+)\)|url\(([^)]+)\))(?:[^;]+;\s*))*
+            # re.compile(r"^\s*src:\s*((?:local|url\([^)]+\))(?:[^;]+;))", re.MULTILINE | re.DOTALL)
+            re_font_src_contents = re.compile(
+                # Match the string "src:" at the beginning of the line, possibly
+                # preceded by any number of whitespace characters
+                r"^\s*src:\s*"
+                # Match zero or more repetitions of a non-capturing group that
+                # consists of either the string "local" or a "url(<content>)"
+                # pattern, followed by any number of characters that are not a
+                # semicolon (;) and a semicolon with any number of preceding
+                # whitespace characters
+                r"((?:local|url\([^)]+\))[^;]+;)",
+                # Set the re.MULTILINE and re.DOTALL flags
+                re.MULTILINE | re.DOTALL,
+            )
+            for match in re_font_src_contents.finditer(css.get()):
+                src = match.group(1)
+                re_contents = re.compile(
+                    # Match the string "local(" followed by any number of characters that
+                    # are not a closing parenthesis, followed by a closing parenthesis
+                    # and capture the contents in a named capture group "local"
+                    r"local\((?P<local>[^)]+)\)|"
+                    # Match the string "url(" followed by any number of characters that
+                    # are not a closing parenthesis, followed by a closing parenthesis
+                    # and capture the contents in a named capture group "url"
+                    r"url\((?P<url>[^)]+)\)",
+                    # Set the re.VERBOSE flag
+                    re.VERBOSE,
+                )
+                groupdict = re_contents.search(src).groupdict()
+                list(m.groupdict() for m in re_contents.finditer(src))
+                # todo - get all occurences of each of local, url; groupdict is
+                #  only the first of each
+
+                print(src)
+
             stylesheet = tinycss.make_parser().parse_stylesheet(css.get())
             declarations: Iterable[tuple[RuleSet, Declaration]]
             declarations = (
